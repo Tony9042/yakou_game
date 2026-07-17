@@ -1,0 +1,20 @@
+; Engine configuration file.
+; 用 Godot 4.x 開啟這個資料夾即可直接載入專案。
+
+[application]
+
+config/name="YAKOU 夜行"
+config/description="都會奇幻動作RPG - ROGUE + NEON + 魂魄系統"
+config/features=PackedStringArray("4.3")
+config/icon="res://icon.svg"
+
+[autoload]
+
+SoulSystem="*res://systems/soul_system.gd"
+TalentSystem="*res://systems/talent_system.gd"
+RunManager="*res://systems/run_manager.gd"
+StreamerHooks="*res://systems/streamer_hooks.gd"
+
+[rendering]
+
+renderer/rendering_method="mobile"

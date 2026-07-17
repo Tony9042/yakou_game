@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/characters/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "shizuku"
+display_name = "雫"
+romaji = "SHIZUKU"
+role = "支援 / SUPPORT"
+title = "拾荒者"
+blurb = "收集城市裡被遺忘的物件與情感，喚醒沉睡的付喪神，與牠們並肩對抗更深的黑暗。"
+kanji = "雫"
+talent_tree_id = "support_tree"
+atk = 30
+spd = 48
+def = 70

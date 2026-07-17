@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/characters/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ren"
+display_name = "蓮"
+romaji = "REN"
+role = "太刀使い / BLADE"
+title = "拔刀夜叉"
+blurb = "前刑警，如今遊走巷弄追捕失控的付喪神。出刀前總有三秒沉默，那是他留給對手的最後溫柔。"
+kanji = "蓮"
+talent_tree_id = "blade_tree"
+atk = 88
+spd = 64
+def = 52

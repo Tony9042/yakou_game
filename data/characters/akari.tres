@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/characters/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "akari"
+display_name = "灯"
+romaji = "AKARI"
+role = "祈禱師 / WARD"
+title = "觀落陰"
+blurb = "神社出身的占卜少女，能看見纏繞在招牌與電線上的怨念，以符咒將其安撫，而非消滅。"
+kanji = "灯"
+talent_tree_id = "ward_tree"
+atk = 40
+spd = 56
+def = 78
