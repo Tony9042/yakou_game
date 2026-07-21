@@ -28,19 +28,12 @@ var _action_bar: HBoxContainer
 var _status: RichTextLabel
 var _identity: RichTextLabel
 var _pending := {}          # 當前遭遇待處理的付喪神
-var _inited := false
 
 
 func _ready() -> void:
 	_build_ui()
 	if not RunManager.night_ended.is_connected(_on_night_ended):
 		RunManager.night_ended.connect(_on_night_ended)
-	# 首次進場：給一點起始資源＋示範性投兩個流派（讓本輪身分面板有內容）
-	if not _inited:
-		_inited = true
-		SoulSystem.residual_souls = 12
-		TalentSystem.unlock_node("blade", "拔刀")
-		TalentSystem.unlock_node("rider", "突進")
 	_start_night()
 
 
@@ -122,7 +115,11 @@ func _on_night_ended(success: bool, gained: int) -> void:
 	_log("\n[color=#ffb45a]— %s —[/color]" % head)
 	_log("本夜收容轉為殘留魂魄 [color=#38e1e8]+%d[/color]（已保留供橫丁養成）。" % gained)
 	_log("[color=#9c95bb]魂魄囊已結算清空；殘留魂魄與流派永久保留。[/color]")
-	_set_actions([["返回橫丁 · 再跑一夜", _start_night, VIOLET]])
+	_set_actions([["返回橫丁", _return_to_hall, VIOLET]])
+
+
+func _return_to_hall() -> void:
+	get_tree().change_scene_to_file("res://hall.tscn")
 
 
 # ============================================================
