@@ -3,7 +3,9 @@ extends Node
 ## 對應企劃文件《第1章 核心遊戲循環》
 ## 管理「一夜」的節點地圖生成與進程，一夜結束時交給 SoulSystem 結算。
 
-enum NodeType { ENCOUNTER, BLACK_MARKET, SIGHTING, CONTRACT, BOSS }
+## NONE = -1 作為「無節點」哨兵值（advance 在非執行狀態回傳）；
+## 因 -1+1=0，ENCOUNTER 仍為 0，其餘值不變。
+enum NodeType { NONE = -1, ENCOUNTER, BLACK_MARKET, SIGHTING, CONTRACT, BOSS }
 
 ## 依代（軀殼）範例——魂每夜附身的可客製身體（§3.4）。之後可改為讀取玩家客製資料。
 const VESSELS := ["破傘之骸", "廢棄自販機", "斷線街燈", "無主招牌"]
@@ -65,11 +67,11 @@ func _build_node_sequence() -> Array:
 ## 前進到下一個節點；抵達地圖尾端（Boss 之後）視為撤離成功。
 func advance() -> NodeType:
 	if not run_active:
-		return -1
+		return NodeType.NONE
 	current_index += 1
 	if current_index >= current_map.size():
 		end_run(true)
-		return -1
+		return NodeType.NONE
 	var node_type: NodeType = current_map[current_index]
 	emit_signal("node_entered", node_type)
 	return node_type
