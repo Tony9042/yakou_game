@@ -47,6 +47,21 @@ const CYAN := Color("38e1e8")
 const INK := Color("efeaff")
 const MUTED := Color("9c95bb")
 
+## 三連段：第三段更重、更廣、更頓。
+const COMBO_DMG := [1.0, 1.05, 1.6]
+const COMBO_ARC := [1.0, 1.0, 1.35]
+const COMBO_LUNGE := [430.0, 450.0, 540.0]
+const COMBO_WINDOW := 0.55        # 這段時間內再按 J 才接得上下一段
+
+## 流派技能 —— 對應 TalentSystem 的天賦節點，投點後才可使用（§3.2）。
+## 獨立執行 combat.tscn 時全部解鎖，方便單獨測試。
+const SKILLS := [
+	{"key": KEY_U, "label": "U", "school": "blade",   "node": "拔刀", "name": "拔刀",   "cd": 4.0},
+	{"key": KEY_I, "label": "I", "school": "rider",   "node": "突進", "name": "突進斬", "cd": 3.0},
+	{"key": KEY_O, "label": "O", "school": "ward",    "node": "封印", "name": "封印陣", "cd": 7.0},
+	{"key": KEY_P, "label": "P", "school": "support", "node": "馴養", "name": "修復",   "cd": 10.0},
+]
+
 const SOUL_NAMES := ["提灯付喪神", "傘化生", "招牌の主"]
 
 ## 依代（軀殼）外觀預設 —— §3.4 的「可換客製層」。
@@ -66,6 +81,14 @@ const VESSEL_PRESETS := [
 	},
 ]
 
+## 嵌入模式設定 —— 由節點地圖在 instantiate 後、add_child 前設定。
+signal finished(won: bool)
+var embedded := false            # true：作為子場景嵌入，結束時發 finished 而非顯示重來
+var cfg_enemy_count := 3
+var cfg_enemy_hp := ENEMY_HP
+var cfg_start_hp := PLAYER_MAX_HP
+var cfg_vessel := 0
+
 var player: CharacterBody2D
 var swing: Polygon2D
 var enemies: Array = []          # [{body, hp, kb:Vector2, flash, touch_cd, fill, vis}]
@@ -77,6 +100,11 @@ var dash_cd := 0.0
 var dash_dir := Vector2.RIGHT
 var atk_t := 0.0
 var atk_hit_done := false
+var combo := 0
+var combo_timer := 0.0
+var skill_cd := [0.0, 0.0, 0.0, 0.0]
+var dash_damage := false
+var dash_hit: Array = []
 var lunge := 0.0
 var face_sign := 1.0
 var vessel_idx := 0
@@ -88,12 +116,14 @@ var state := "fight"             # fight / win / lose
 var arena := Rect2()
 var _hp_bar: ProgressBar
 var _info: Label
+var _skills: RichTextLabel
 var _banner: Label
 var _actions: HBoxContainer
 var _cam: Camera2D
 
 
 func _ready() -> void:
+	vessel_idx = cfg_vessel
 	_build_world()
 	_build_ui()
 	_reset_fight()
@@ -194,7 +224,7 @@ func _spawn_enemies() -> void:
 			e.body.queue_free()
 	enemies.clear()
 	var centre := arena.position + arena.size * 0.5
-	for i in 3:
+	for i in cfg_enemy_count:
 		var body := CharacterBody2D.new()
 		body.motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
 		var cs := CollisionShape2D.new()
@@ -215,12 +245,12 @@ func _spawn_enemies() -> void:
 		]), ROSE)
 		fill.position = Vector2(-22, 0)
 		body.add_child(fill)
-		var ang := TAU * float(i) / 3.0
+		var ang := TAU * float(i) / float(max(1, cfg_enemy_count))
 		body.position = centre + Vector2(cos(ang), sin(ang)) * 230.0
 		add_child(body)
 		enemies.append({
-			"body": body, "hp": ENEMY_HP, "kb": Vector2.ZERO,
-			"flash": 0.0, "touch_cd": 0.0, "fill": fill, "vis": vis,
+			"body": body, "hp": cfg_enemy_hp, "kb": Vector2.ZERO,
+			"flash": 0.0, "touch_cd": 0.0, "stun": 0.0, "fill": fill, "vis": vis,
 			"name": SOUL_NAMES[i % SOUL_NAMES.size()],
 		})
 
@@ -256,6 +286,13 @@ func _build_ui() -> void:
 	_info.add_theme_color_override("font_color", MUTED)
 	col.add_child(_info)
 
+	_skills = RichTextLabel.new()
+	_skills.bbcode_enabled = true
+	_skills.fit_content = true
+	_skills.scroll_active = false
+	_skills.add_theme_font_size_override("normal_font_size", 14)
+	col.add_child(_skills)
+
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -274,7 +311,7 @@ func _build_ui() -> void:
 	col.add_child(_actions)
 
 	var hint := Label.new()
-	hint.text = "WASD／方向鍵 移動　　J／空白 揮砍　　K／Shift 疾走(無敵)　　1 2 3 換依代　　R 重來"
+	hint.text = "WASD 移動　　J 連段揮砍(可三連)　　K/Shift 疾走　　U I O P 流派技能　　1 2 3 換依代"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color("6a6590"))
@@ -287,11 +324,16 @@ func _reset_fight() -> void:
 	_cam.position = arena.position + arena.size * 0.5
 	player.position = arena.position + arena.size * 0.5
 	player.velocity = Vector2.ZERO
-	player_hp = PLAYER_MAX_HP
+	player_hp = clampi(cfg_start_hp, 1, PLAYER_MAX_HP)
 	facing = Vector2.RIGHT
 	dash_t = 0.0
 	dash_cd = 0.0
 	atk_t = 0.0
+	combo = 0
+	combo_timer = 0.0
+	skill_cd = [0.0, 0.0, 0.0, 0.0]
+	dash_damage = false
+	dash_hit = []
 	lunge = 0.0
 	invuln = 0.0
 	hitstop = 0.0
@@ -310,7 +352,7 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	var k: int = event.keycode
-	if k == KEY_R:
+	if k == KEY_R and not embedded:      # 嵌入夜行時不允許重來，避免破壞一夜流程
 		_reset_fight()
 		return
 	# 換依代：隨時可切，用來檢視外觀客製的辨識度
@@ -323,8 +365,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if k == KEY_J or k == KEY_SPACE:
 		_try_attack()
+		return
 	elif k == KEY_K or k == KEY_SHIFT:
 		_try_dash()
+		return
+	for i in SKILLS.size():
+		if k == SKILLS[i].key:
+			_try_skill(i)
+			return
 
 
 func _move_input() -> Vector2:
@@ -343,9 +391,68 @@ func _move_input() -> Vector2:
 func _try_attack() -> void:
 	if atk_t > 0.0 or dash_t > 0.0:
 		return
+	# 在連段視窗內再按，就接下一段；否則從第一段重來
+	combo = (combo + 1) % 3 if combo_timer > 0.0 else 0
+	combo_timer = 0.0                      # 收招後才重新開視窗
 	atk_t = ATK_WINDUP + ATK_ACTIVE + ATK_RECOVER
 	atk_hit_done = false
-	lunge = ATK_LUNGE
+	lunge = COMBO_LUNGE[combo]
+
+
+func _try_skill(i: int) -> void:
+	if not _skill_ready(i) or atk_t > 0.0 or dash_t > 0.0:
+		return
+	skill_cd[i] = SKILLS[i].cd
+	match i:
+		0: _skill_iai()
+		1: _skill_dash_slash()
+		2: _skill_ward()
+		3: _skill_mend()
+
+
+## 該技能是否已由天賦解鎖（獨立測試時全開）。
+func _skill_unlocked(i: int) -> bool:
+	if not embedded:
+		return true
+	var s: Dictionary = SKILLS[i]
+	return TalentSystem.nodes[s.school][s.node]["unlocked"]
+
+
+func _skill_ready(i: int) -> bool:
+	return _skill_unlocked(i) and skill_cd[i] <= 0.0
+
+
+## 拔刀（刀語）：一記長距離高傷突刺。
+func _skill_iai() -> void:
+	lunge = 560.0
+	_flash_line(300.0, Color(1, 1, 1, 0.55))
+	if _cone_hit(300.0, 34.0, 58, 640.0):
+		hitstop = 0.10
+		shake = 1.6
+
+
+## 突進斬（疾走）：帶傷害的衝刺，途中掃過的敵人受傷。
+func _skill_dash_slash() -> void:
+	dash_dir = facing
+	dash_t = 0.24
+	invuln = maxf(invuln, 0.30)
+	dash_damage = true
+	dash_hit = []
+
+
+## 封印陣（結界）：以自身為中心的範圍控場，命中者定身。
+func _skill_ward() -> void:
+	_ring_burst(210.0, CYAN)
+	if _radial_hit(210.0, 16, 150.0, 1.7):
+		hitstop = 0.06
+		shake = 1.0
+
+
+## 修復（羈絆）：回復魂。
+func _skill_mend() -> void:
+	player_hp = mini(PLAYER_MAX_HP, player_hp + 32)
+	_ring_burst(120.0, Color("8affc0"))
+	_spawn_damage_number(player.position, -32)
 
 
 func _try_dash() -> void:
@@ -355,6 +462,7 @@ func _try_dash() -> void:
 	dash_dir = d if d != Vector2.ZERO else facing
 	dash_t = DASH_TIME
 	dash_cd = DASH_CD
+	dash_damage = false                 # 一般疾走不帶傷害（突進斬才有）
 	invuln = max(invuln, DASH_TIME + 0.05)
 
 
@@ -371,6 +479,11 @@ func _physics_process(delta: float) -> void:
 	dash_cd = max(0.0, dash_cd - delta)
 	invuln = max(0.0, invuln - delta)
 	shake = max(0.0, shake - delta * 3.0)
+	combo_timer = max(0.0, combo_timer - delta)
+	if combo_timer <= 0.0 and atk_t <= 0.0:
+		combo = 0                      # 視窗過期，下一次從第一段開始
+	for i in skill_cd.size():
+		skill_cd[i] = max(0.0, skill_cd[i] - delta)
 
 	_update_player(delta)
 	_update_attack(delta)
@@ -426,33 +539,88 @@ func _update_attack(delta: float) -> void:
 		_do_swing()
 	if atk_t <= 0.0:
 		swing.visible = false
+		combo_timer = COMBO_WINDOW      # 收招後開啟接段視窗
 
 
 func _do_swing() -> void:
+	var m: float = COMBO_DMG[combo]
+	var dmg := int(round(ATK_DAMAGE * m))
+	if _cone_hit(ATK_RANGE, ATK_ARC * COMBO_ARC[combo], dmg, ATK_KNOCKBACK * m):
+		hitstop = HITSTOP * (1.5 if combo == 2 else 1.0)
+		shake = 1.6 if combo == 2 else 1.0
+
+
+## 扇形判定：以 facing 為中心、arc_deg 為總角度。回傳是否命中任一目標。
+func _cone_hit(rng: float, arc_deg: float, dmg: int, kb: float, stun := 0.0) -> bool:
 	var hit_any := false
 	for e in enemies:
 		if e.hp <= 0:
 			continue
 		var to: Vector2 = e.body.position - player.position
 		var dist := to.length()
-		if dist > ATK_RANGE + ENEMY_RADIUS:
+		if dist > rng + ENEMY_RADIUS:
 			continue
-		if abs(angle_difference(facing.angle(), to.angle())) > deg_to_rad(ATK_ARC) * 0.5:
+		if abs(angle_difference(facing.angle(), to.angle())) > deg_to_rad(arc_deg) * 0.5:
 			continue
-		e.hp -= ATK_DAMAGE
-		e.flash = 0.12
-		e.kb = to.normalized() * ATK_KNOCKBACK
+		_damage_enemy(e, dmg, to.normalized() * kb, stun, dist)
 		hit_any = true
-		# 命中特效：火花 + 傷害數字 + 敵人擠壓
-		var impact: Vector2 = player.position + to.normalized() * (dist - ENEMY_RADIUS * 0.5)
-		_spawn_spark(impact, to.angle())
-		_spawn_damage_number(e.body.position, ATK_DAMAGE)
-		_punch(e.vis)
+	return hit_any
+
+
+## 環形判定：以自身為圓心的範圍傷害。
+func _radial_hit(radius: float, dmg: int, kb: float, stun := 0.0) -> bool:
+	var hit_any := false
+	for e in enemies:
 		if e.hp <= 0:
-			e.body.visible = false
-	if hit_any:
-		hitstop = HITSTOP
-		shake = 1.0
+			continue
+		var to: Vector2 = e.body.position - player.position
+		var dist := to.length()
+		if dist > radius + ENEMY_RADIUS:
+			continue
+		_damage_enemy(e, dmg, to.normalized() * kb, stun, dist)
+		hit_any = true
+	return hit_any
+
+
+func _damage_enemy(e: Dictionary, dmg: int, kb_vec: Vector2, stun: float, dist: float) -> void:
+	e.hp -= dmg
+	e.flash = 0.12
+	e.kb = kb_vec
+	if stun > 0.0:
+		e.stun = stun
+	var dir := kb_vec.normalized()
+	var impact: Vector2 = player.position + dir * maxf(0.0, dist - ENEMY_RADIUS * 0.5)
+	_spawn_spark(impact, dir.angle())
+	_spawn_damage_number(e.body.position, dmg)
+	_punch(e.vis)
+	if e.hp <= 0:
+		e.body.visible = false
+
+
+## 拔刀的長條閃光。
+func _flash_line(length: float, col: Color) -> void:
+	var line := _poly(PackedVector2Array([
+		Vector2(10, -9), Vector2(length, -3), Vector2(length, 3), Vector2(10, 9)
+	]), col)
+	line.rotation = facing.angle()
+	line.position = player.position
+	add_child(line)
+	var t := line.create_tween()
+	t.tween_property(line, "modulate:a", 0.0, 0.22)
+	t.tween_callback(line.queue_free)
+
+
+## 範圍技的擴散光環。
+func _ring_burst(radius: float, col: Color) -> void:
+	var ring := _poly(_circle(radius, 24), Color(col.r, col.g, col.b, 0.22))
+	ring.position = player.position
+	ring.scale = Vector2(0.25, 0.25)
+	add_child(ring)
+	var t := ring.create_tween()
+	t.set_parallel(true)
+	t.tween_property(ring, "scale", Vector2.ONE, 0.22)
+	t.tween_property(ring, "modulate:a", 0.0, 0.3)
+	t.chain().tween_callback(ring.queue_free)
 
 
 ## 命中處炸開的星芒，快速放大並淡出。
@@ -499,15 +667,28 @@ func _update_enemies(delta: float) -> void:
 		var body: CharacterBody2D = e.body
 		e.flash = max(0.0, e.flash - delta)
 		e.touch_cd = max(0.0, e.touch_cd - delta)
+		e.stun = max(0.0, e.stun - delta)
 		e.kb = e.kb.move_toward(Vector2.ZERO, 1400.0 * delta)
 
-		var chase := (player.position - body.position).normalized() * ENEMY_SPEED
+		# 被封印時只受擊退擺佈，無法追擊
+		var chase := Vector2.ZERO
+		if e.stun <= 0.0:
+			chase = (player.position - body.position).normalized() * ENEMY_SPEED
 		body.velocity = chase + e.kb
+
+		# 突進斬：衝刺途中掃到的敵人各受一次傷
+		if dash_damage and dash_t > 0.0 and not dash_hit.has(e.body.get_instance_id()):
+			if body.position.distance_to(player.position) <= 72.0 + ENEMY_RADIUS:
+				dash_hit.append(e.body.get_instance_id())
+				_damage_enemy(e, 34, (body.position - player.position).normalized() * 300.0,
+					0.0, body.position.distance_to(player.position))
+				hitstop = 0.04
+				shake = 1.0
 		body.move_and_slide()
 		body.position = _clamp_arena(body.position, ENEMY_RADIUS)
 
 		body.modulate = Color(2.2, 2.2, 2.2) if e.flash > 0.0 else Color(1, 1, 1)
-		e.fill.scale.x = clampf(float(e.hp) / float(ENEMY_HP), 0.0, 1.0)
+		e.fill.scale.x = clampf(float(e.hp) / float(max(1, cfg_enemy_hp)), 0.0, 1.0)
 
 		if body.position.distance_to(player.position) <= PLAYER_RADIUS + ENEMY_RADIUS + 4.0:
 			if e.touch_cd <= 0.0 and invuln <= 0.0:
@@ -545,14 +726,20 @@ func _end_fight(won: bool) -> void:
 	swing.visible = false
 	_banner.visible = true
 	_clear(_actions)
+	_banner.text = "付喪神已伏" if won else "依代毀去"
+	_banner.add_theme_color_override("font_color", CYAN if won else ROSE)
+
+	if embedded:
+		# 嵌入模式：留一點餘韻後把結果交回節點地圖，由它處理鎮壓／收容與結算
+		await get_tree().create_timer(0.9).timeout
+		if is_instance_valid(self):
+			finished.emit(won)
+		return
+
 	if won:
-		_banner.text = "付喪神已伏"
-		_banner.add_theme_color_override("font_color", CYAN)
 		_actions.add_child(_button("鎮壓", ROSE, _on_suppress))
 		_actions.add_child(_button("收容", CYAN, _on_contain))
 	else:
-		_banner.text = "依代毀去"
-		_banner.add_theme_color_override("font_color", ROSE)
 		_actions.add_child(_button("再戰一次（R）", VIOLET, _reset_fight))
 
 
@@ -586,6 +773,18 @@ func _update_ui() -> void:
 	_info.text = "魂 %d/%d　　付喪神剩餘 %d　　疾走：%s　　依代：%s" % [
 		player_hp, PLAYER_MAX_HP, alive, dash_txt, vessel
 	]
+
+	# 技能列：未解鎖顯示灰字（需在橫丁投該流派天賦）
+	var parts: Array = []
+	for i in SKILLS.size():
+		var s: Dictionary = SKILLS[i]
+		if not _skill_unlocked(i):
+			parts.append("[color=#4b4766][%s] %s 未習[/color]" % [s.label, s.name])
+		elif skill_cd[i] > 0.0:
+			parts.append("[color=#6a6590][%s] %s %.1fs[/color]" % [s.label, s.name, skill_cd[i]])
+		else:
+			parts.append("[color=#38e1e8][%s][/color] [color=#efeaff]%s[/color]" % [s.label, s.name])
+	_skills.text = "　　".join(parts)
 
 
 func _clamp_arena(p: Vector2, r: float) -> Vector2:

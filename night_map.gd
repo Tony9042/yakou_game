@@ -28,6 +28,9 @@ var _action_bar: HBoxContainer
 var _status: RichTextLabel
 var _identity: RichTextLabel
 var _pending := {}          # 當前遭遇待處理的付喪神
+var _night_hp := 100        # 魂的體力，跨節點保留；戰死即結束一夜
+var _combat: Node = null
+var _ui_root: MarginContainer
 
 
 func _ready() -> void:
@@ -42,6 +45,7 @@ func _ready() -> void:
 # ============================================================
 func _start_night() -> void:
 	_pending = {}
+	_night_hp = 100
 	RunManager.generate_night()          # 隨機種子＋隨機依代
 	_log_clear()
 	_log("[color=#ffb45a]— 橫丁 · 黃昏 —[/color]")
@@ -67,24 +71,75 @@ func _present_node(t: int) -> void:
 			var q := (randi() % 2) + (2 if is_contract else 1)   # 契約品質較高
 			_pending = {"id": SOUL_NAMES[randi() % SOUL_NAMES.size()], "q": q}
 			_log("\n[color=#ff3d81]▶ %s[/color]：一隻「%s」擋住去路（品質 %d）。" % [info.name, _pending.id, q])
-			_log("[color=#9c95bb]鎮壓＝本輪增益；收容＝納入魂魄囊、日後可成夥伴。[/color]")
-			_set_actions([
-				["鎮壓", _on_suppress, ROSE],
-				["收容", _on_contain, CYAN],
-			])
+			_set_actions([["應戰", _start_combat.bind(t), ROSE]])
 		RunManager.NodeType.BLACK_MARKET:
-			_log("\n[color=#38e1e8]▶ 黑市[/color]：暗處有人兜售道具。今夜先探個路。")
-			_set_actions([["離開黑市", _advance, MUTED]])
+			_log("\n[color=#38e1e8]▶ 黑市[/color]：暗處有人兜售道具，也能在此稍作休整。")
+			var acts: Array = []
+			if _night_hp < 100:
+				acts.append(["休整（回復 25 魂）", _on_rest, CYAN])
+			acts.append(["離開黑市", _advance, MUTED])
+			_set_actions(acts)
 		RunManager.NodeType.SIGHTING:
 			_log("\n[color=#ffb45a]▶ 目擊[/color]：%s" % SIGHTING_LINES[randi() % SIGHTING_LINES.size()])
 			_set_actions([["繼續前行", _advance, AMBER]])
 		RunManager.NodeType.BOSS:
 			_pending = {"id": "「拆」之魂", "q": 4}
 			_log("\n[color=#ff3d81]☠ 深夜案件[/color]：抹除一切的「拆」之魂現身了。")
-			_set_actions([
-				["鎮壓", _on_suppress, ROSE],
-				["收容", _on_contain, CYAN],
-			])
+			_set_actions([["決戰", _start_combat.bind(t), ROSE]])
+
+
+func _on_rest() -> void:
+	_night_hp = mini(100, _night_hp + 25)
+	_log("你在暗巷角落喘了口氣。（魂 %d/100）" % _night_hp)
+	_refresh_status()
+	_set_actions([["離開黑市", _advance, MUTED]])
+
+
+# ============================================================
+#  戰鬥（以子場景嵌入，避免切場景導致本夜路線重新生成）
+# ============================================================
+func _start_combat(t: int) -> void:
+	var count := 2
+	var hp := 60
+	match t:
+		RunManager.NodeType.CONTRACT:
+			count = 3
+			hp = 78
+		RunManager.NodeType.BOSS:
+			count = 1
+			hp = 230
+
+	var scene: PackedScene = load("res://combat.tscn")
+	_combat = scene.instantiate()
+	_combat.embedded = true
+	_combat.cfg_enemy_count = count
+	_combat.cfg_enemy_hp = hp
+	_combat.cfg_start_hp = _night_hp
+	_combat.cfg_vessel = maxi(0, RunManager.VESSELS.find(RunManager.current_vessel))
+	_combat.finished.connect(_on_combat_finished)
+	_ui_root.visible = false          # 收起地圖 UI，讓戰鬥畫面獨佔
+	add_child(_combat)
+
+
+func _on_combat_finished(won: bool) -> void:
+	if is_instance_valid(_combat):
+		_night_hp = maxi(0, int(_combat.player_hp))
+		_combat.queue_free()
+	_combat = null
+	_ui_root.visible = true
+	_refresh_status()
+
+	if not won:
+		_log("\n[color=#ff6b6b]依代在夜裡毀去。[/color]")
+		RunManager.end_run(false)     # 戰死：結算走半數轉換率
+		return
+
+	_log("「%s」已伏。（魂 %d/100）" % [_pending.id, _night_hp])
+	_log("[color=#9c95bb]鎮壓＝本輪增益；收容＝納入魂魄囊、日後可成夥伴。[/color]")
+	_set_actions([
+		["鎮壓", _on_suppress, ROSE],
+		["收容", _on_contain, CYAN],
+	])
 
 
 func _on_suppress() -> void:
@@ -138,6 +193,7 @@ func _build_ui() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 34)
 	add_child(margin)
+	_ui_root = margin
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 18)
@@ -176,8 +232,12 @@ func _build_ui() -> void:
 		lm.add_theme_constant_override("margin_" + side, 16)
 	log_wrap.add_child(lm)
 	_msg = _make_rich(15)
+	# 關鍵：fit_content 會讓日誌隨內容無限長高，把下方按鈕擠出視窗而點不到。
+	# 關掉它並開啟捲動，日誌就會固定在容器內、自動捲到最新一行。
+	_msg.fit_content = false
 	_msg.scroll_active = true
 	_msg.scroll_following = true
+	_msg.custom_minimum_size = Vector2(0, 150)
 	_msg.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lm.add_child(_msg)
 
@@ -246,8 +306,8 @@ func _set_actions(actions: Array) -> void:
 
 
 func _refresh_status() -> void:
-	_status.text = "[color=#9c95bb]殘留魂魄[/color] [color=#38e1e8]%d[/color]    [color=#9c95bb]魂魄囊[/color] [color=#ff3d81]%d/%d[/color]    [color=#9c95bb]依代[/color] [color=#a97bff]%s[/color]" % [
-		SoulSystem.residual_souls, SoulSystem.satchel.size(), SoulSystem.MAX_SATCHEL_CAPACITY, RunManager.current_vessel
+	_status.text = "[color=#9c95bb]魂[/color] [color=#ff3d81]%d/100[/color]    [color=#9c95bb]殘留魂魄[/color] [color=#38e1e8]%d[/color]    [color=#9c95bb]魂魄囊[/color] [color=#ff3d81]%d/%d[/color]    [color=#9c95bb]依代[/color] [color=#a97bff]%s[/color]" % [
+		_night_hp, SoulSystem.residual_souls, SoulSystem.satchel.size(), SoulSystem.MAX_SATCHEL_CAPACITY, RunManager.current_vessel
 	]
 	var id := RunManager.run_identity()
 	var schools := "—" if id.schools.is_empty() else ", ".join(id.schools)
