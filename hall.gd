@@ -22,9 +22,9 @@ var _event := ""
 
 func _ready() -> void:
 	_school_col = {"blade": ROSE, "ward": AMBER, "rider": CYAN, "support": VIOLET}
-	# 每次遊戲啟動給一次起始殘留魂魄（Engine meta 於同一場遊戲內持續、重啟歸零）
-	if not Engine.has_meta("yakou_started"):
-		Engine.set_meta("yakou_started", true)
+	# 正常流程由標題畫面的新遊戲／繼續發放資源；此處僅為「直接執行 hall.tscn」
+	# 的開發便利：全新且無存檔時給一點起始魂魄，不會蓋掉載入的進度。
+	if SoulSystem.residual_souls == 0 and TalentSystem.invested_schools().is_empty() and not SaveSystem.has_save():
 		SoulSystem.residual_souls = 10
 	if not TalentSystem.composite_unlocked.is_connected(_on_composite):
 		TalentSystem.composite_unlocked.connect(_on_composite)
@@ -196,16 +196,19 @@ func _make_node_button(sid: String, node_name: String, nd: Dictionary, accent: C
 func _on_unlock(sid: String, node_name: String) -> void:
 	_event = ""                              # 先清舊事件；若本次投點觸發複合技，
 	TalentSystem.unlock_node(sid, node_name) # _on_composite 會在此期間重設 _event
+	SaveSystem.save_game()
 	_refresh()
 
 
 func _on_respec(sid: String) -> void:
 	TalentSystem.respec(sid, RESPEC_COST)
 	_event = ""
+	SaveSystem.save_game()
 	_refresh()
 
 
 func _go_night() -> void:
+	SaveSystem.save_game()
 	get_tree().change_scene_to_file("res://night_map.tscn")
 
 

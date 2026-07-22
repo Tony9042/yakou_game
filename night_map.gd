@@ -109,6 +109,7 @@ func _after_action() -> void:
 
 
 func _on_night_ended(success: bool, gained: int) -> void:
+	SaveSystem.save_game()          # 結算後（殘留魂魄已變動）立即存檔
 	_refresh_nodes()
 	_refresh_status()
 	var head := "黎明撤離" if success else "戰死"
