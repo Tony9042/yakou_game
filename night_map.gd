@@ -48,8 +48,10 @@ func _start_night() -> void:
 	_night_hp = 100
 	RunManager.generate_night()          # 隨機種子＋隨機依代
 	_log_clear()
-	_log("[color=#ffb45a]— 橫丁 · 黃昏 —[/color]")
-	_log("魂附上了「[color=#a97bff]%s[/color]」。今夜的路線已在眼前。" % RunManager.current_vessel)
+	var a := StorySystem.current_act()
+	_log("[color=#ffb45a]— %s —[/color]" % StorySystem.act_title())
+	_log("[color=#c9c1e6]%s[/color]" % a.intro)
+	_log("\n魂附上了「[color=#a97bff]%s[/color]」。今夜的路線已在眼前。" % RunManager.current_vessel)
 	_refresh_nodes()
 	_refresh_status()
 	_set_actions([["出發夜行", _advance, ROSE]])
@@ -80,11 +82,15 @@ func _present_node(t: int) -> void:
 			acts.append(["離開黑市", _advance, MUTED])
 			_set_actions(acts)
 		RunManager.NodeType.SIGHTING:
-			_log("\n[color=#ffb45a]▶ 目擊[/color]：%s" % SIGHTING_LINES[randi() % SIGHTING_LINES.size()])
+			_log("\n[color=#ffb45a]▶ 目擊[/color]：%s" % StorySystem.next_sighting())
 			_set_actions([["繼續前行", _advance, AMBER]])
 		RunManager.NodeType.BOSS:
 			_pending = {"id": "「拆」之魂", "q": 4}
-			_log("\n[color=#ff3d81]☠ 深夜案件[/color]：抹除一切的「拆」之魂現身了。")
+			if StorySystem.is_final_act():
+				_log("\n[color=#ff3d81]☠ 深夜案件[/color]：由拆除令與遺忘凝成的「拆」之魂，擋在天台盡頭。")
+				_log("[color=#9c95bb]抹除，是溫柔收容的完全反面——牠是你的鏡像。[/color]")
+			else:
+				_log("\n[color=#ff3d81]☠ 深夜案件[/color]：抹除一切的「拆」之魂現身了。")
 			_set_actions([["決戰", _start_combat.bind(t), ROSE]])
 
 
@@ -144,6 +150,7 @@ func _on_combat_finished(won: bool) -> void:
 
 func _on_suppress() -> void:
 	SoulSystem.suppress_soul(_pending.id, {})
+	StorySystem.record_choice(false)
 	_log("你[color=#ff3d81]鎮壓[/color]了「%s」，化為本輪戰鬥增益。" % _pending.id)
 	_after_action()
 
@@ -151,6 +158,7 @@ func _on_suppress() -> void:
 func _on_contain() -> void:
 	var ok: bool = SoulSystem.contain_soul(_pending.id, _pending.q)
 	if ok:
+		StorySystem.record_choice(true)
 		_log("你[color=#38e1e8]收容[/color]了「%s」，納入魂魄囊。" % _pending.id)
 	else:
 		_log("[color=#ff6b6b]魂魄囊已滿（%d/%d），收容失敗！[/color]" % [SoulSystem.satchel.size(), SoulSystem.MAX_SATCHEL_CAPACITY])
@@ -171,6 +179,23 @@ func _on_night_ended(success: bool, gained: int) -> void:
 	_log("\n[color=#ffb45a]— %s —[/color]" % head)
 	_log("本夜收容轉為殘留魂魄 [color=#38e1e8]+%d[/color]（已保留供橫丁養成）。" % gained)
 	_log("[color=#9c95bb]魂魄囊已結算清空；殘留魂魄與流派永久保留。[/color]")
+
+	if success:
+		var was_final := StorySystem.is_final_act()
+		_log("\n[color=#c9c1e6]%s[/color]" % StorySystem.current_act().outro)
+		var reveal := StorySystem.advance_act()      # 推進幕次，回傳本次揭示
+		if reveal != "":
+			_log("\n[color=#ffb45a]%s[/color]" % reveal)
+		if was_final:
+			var e := StorySystem.ending()
+			_log("\n[color=#38e1e8]— 結局：%s —[/color]" % e.name)
+			_log("[color=#c9c1e6]%s[/color]" % e.text)
+		else:
+			_log("\n[color=#6a6590]下一夜：%s[/color]" % StorySystem.act_title())
+	else:
+		_log("[color=#6a6590]這一夜沒能走完，街區的拆除仍在繼續。[/color]")
+
+	SaveSystem.save_game()          # 幕次／結局傾向也要存
 	_set_actions([["返回橫丁", _return_to_hall, VIOLET]])
 
 

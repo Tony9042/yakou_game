@@ -100,6 +100,11 @@ func _refresh() -> void:
 	var line := "[color=#9c95bb]殘留魂魄[/color] [color=#38e1e8]%d[/color]    [color=#9c95bb]隊伍光環[/color] [color=#ffb45a]%s[/color]    [color=#9c95bb]複合技[/color] [color=#a97bff]%s[/color]" % [
 		SoulSystem.residual_souls, aura_txt, comp_txt
 	]
+	# 主線進度（§5.4）
+	if StorySystem.finished:
+		line += "\n[color=#6a6590]主線[/color] [color=#38e1e8]已走完全部街區 · 結局：%s[/color]" % StorySystem.ending().name
+	else:
+		line += "\n[color=#6a6590]今夜將前往[/color] [color=#ffb45a]%s[/color]" % StorySystem.act_title()
 	if _event != "":
 		line += "\n[color=#ff3d81]%s[/color]" % _event
 	_status.text = line
@@ -147,6 +152,20 @@ func _make_school_column(sid: String) -> Control:
 	for node_name in nodes:
 		var nd: Dictionary = nodes[node_name]
 		v.add_child(_make_node_button(sid, node_name, nd, accent))
+
+	# 導師對話（§5.5）：投該流派愈深，導師透露愈多守夜人的過去
+	var quote := RichTextLabel.new()
+	quote.bbcode_enabled = true
+	quote.fit_content = true
+	quote.scroll_active = false
+	quote.add_theme_font_size_override("normal_font_size", 12)
+	quote.custom_minimum_size = Vector2(0, 54)
+	var line: String = StorySystem.mentor_line(sid)
+	if line == "":
+		quote.text = "[color=#4b4766]（投點後，%s 會與你說話）[/color]" % meta.mentor
+	else:
+		quote.text = "[color=#b9b1d6]%s[/color]" % line
+	v.add_child(quote)
 
 	# 重置
 	var sp := Control.new()
