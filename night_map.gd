@@ -107,19 +107,28 @@ func _on_rest() -> void:
 func _start_combat(t: int) -> void:
 	var count := 2
 	var hp := 60
+	var types: Array = ["chaser", "chaser"]
 	match t:
+		RunManager.NodeType.ENCOUNTER:
+			# 一般遭遇隨機挑一種組合，讓每場感覺不同
+			types = [["chaser", "chaser"], ["chaser", "ranged"], ["charger", "chaser"]].pick_random()
+			count = types.size()
 		RunManager.NodeType.CONTRACT:
+			types = ["chaser", "ranged", "charger"]
 			count = 3
 			hp = 78
 		RunManager.NodeType.BOSS:
-			count = 1
-			hp = 230
+			# 拆之魂＋兩隻護衛，愈後期的幕護衛愈硬
+			types = ["boss", "ranged", "charger"]
+			count = 3
+			hp = 150
 
 	var scene: PackedScene = load("res://combat.tscn")
 	_combat = scene.instantiate()
 	_combat.embedded = true
 	_combat.cfg_enemy_count = count
 	_combat.cfg_enemy_hp = hp
+	_combat.cfg_types = types
 	_combat.cfg_start_hp = _night_hp
 	_combat.cfg_vessel = maxi(0, RunManager.VESSELS.find(RunManager.current_vessel))
 	_combat.finished.connect(_on_combat_finished)
