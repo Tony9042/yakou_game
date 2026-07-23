@@ -13,8 +13,16 @@ const MAX_SATCHEL_CAPACITY := 5
 ## 本輪收容中的魂魄： [{ id, quality, buff_type }]
 var satchel: Array[Dictionary] = []
 
+## 黑市「魂囊符」給的本夜額外容量（結算後歸零）。
+var bonus_capacity := 0
+
 ## 永久貨幣，橫丁天賦樹／解鎖用
 var residual_souls: int = 0
+
+
+## 本夜有效的魂魄囊容量。
+func capacity() -> int:
+	return MAX_SATCHEL_CAPACITY + bonus_capacity
 
 
 ## 鎮壓：立即轉為本輪戰鬥增益，不佔容量、不會轉為殘留魂魄。
@@ -25,7 +33,7 @@ func suppress_soul(soul_id: String, buff: Dictionary) -> void:
 
 ## 收容：納入魂魄囊，成為可切換隨行被動。若容量已滿則收容失敗。
 func contain_soul(soul_id: String, quality: int) -> bool:
-	if satchel.size() >= MAX_SATCHEL_CAPACITY:
+	if satchel.size() >= capacity():
 		emit_signal("satchel_full")
 		return false
 	satchel.append({"id": soul_id, "quality": quality})
@@ -49,6 +57,7 @@ func settle_run(run_success: bool) -> int:
 	residual_souls += gained_int
 	emit_signal("residual_souls_changed", residual_souls)
 	satchel.clear()
+	bonus_capacity = 0          # 黑市加成僅限本夜
 	return gained_int
 
 

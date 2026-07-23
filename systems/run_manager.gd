@@ -17,6 +17,10 @@ var run_active: bool = false
 ## 本輪魂所附的依代（§3.4 客製展示層）。
 var current_vessel: String = ""
 
+## 黑市購買的本夜增益（每夜重置）。
+var run_dmg_mult: float = 1.0
+var run_speed_mult: float = 1.0
+
 signal night_started(map: Array)
 signal node_entered(node_type: NodeType)
 signal night_ended(success: bool, residual_souls_gained: int)
@@ -28,6 +32,8 @@ func generate_night(seed_value: int = -1, vessel: String = "") -> void:
 	if seed_value >= 0:
 		seed(seed_value)
 	current_vessel = vessel if vessel in VESSELS else VESSELS[randi() % VESSELS.size()]
+	run_dmg_mult = 1.0
+	run_speed_mult = 1.0
 	current_map = _build_node_sequence()
 	current_index = -1
 	run_active = true

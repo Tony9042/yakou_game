@@ -112,6 +112,8 @@ var cfg_enemy_hp := 70
 var cfg_start_hp := PLAYER_MAX_HP
 var cfg_vessel := 0
 var cfg_types: Array = []        # 例：["chaser","ranged"]；留空則全為追擊型
+var cfg_dmg_mult := 1.0          # 黑市「利刃符」加成
+var cfg_move_mult := 1.0         # 黑市「韋馱符」加成
 
 var player: CharacterBody2D
 var swing: Polygon2D
@@ -587,7 +589,7 @@ func _update_player(delta: float) -> void:
 	else:
 		var mult := ATK_MOVE_MULT if atk_t > 0.0 else 1.0
 		if input != Vector2.ZERO:
-			player.velocity = player.velocity.move_toward(input * SPEED * mult, ACCEL * delta)
+			player.velocity = player.velocity.move_toward(input * SPEED * mult * cfg_move_mult, ACCEL * delta)
 		else:
 			player.velocity = player.velocity.move_toward(Vector2.ZERO, FRICTION * delta)
 
@@ -795,6 +797,7 @@ func _radial_hit(radius: float, dmg: int, kb: float, stun := 0.0) -> bool:
 
 
 func _damage_enemy(e: Dictionary, dmg: int, kb_vec: Vector2, stun: float, dist: float) -> void:
+	dmg = int(round(dmg * cfg_dmg_mult))        # 套用黑市傷害加成
 	e.hp -= dmg
 	e.flash = 0.12
 	e.kb = kb_vec

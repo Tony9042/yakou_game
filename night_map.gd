@@ -16,6 +16,14 @@ const AMBER := Color("ffb45a")
 const VIOLET := Color("a97bff")
 
 const SOUL_NAMES := ["提灯付喪神", "傘化生", "招牌の主", "自販機禍", "街燈守", "硬幣精", "郵筒翁"]
+
+## 黑市商品（花殘留魂魄，效果限本夜）。§1 節點：黑市＝強化。
+const MARKET_ITEMS := [
+	{"id": "heal", "name": "急救符", "cost": 2, "desc": "立即回復 40 魂"},
+	{"id": "dmg",  "name": "利刃符", "cost": 4, "desc": "本夜傷害 +20%"},
+	{"id": "spd",  "name": "韋馱符", "cost": 3, "desc": "本夜移動 +15%"},
+	{"id": "cap",  "name": "魂囊符", "cost": 3, "desc": "本夜魂魄囊 +1"},
+]
 const SIGHTING_LINES := [
 	"牆上斑駁的塗鴉，依稀是孩童的塗鴉——這條巷子曾經有人住。",
 	"一隻付喪神縮在拆除告示牌後，牠只是不想被忘記。",
@@ -28,6 +36,8 @@ var _action_bar: HBoxContainer
 var _status: RichTextLabel
 var _identity: RichTextLabel
 var _pending := {}          # 當前遭遇待處理的付喪神
+var _market_offer: Array = []   # 本次黑市提供的商品
+var _market_bought: Array = []  # 本次已購買的商品 id
 var _night_hp := 100        # 魂的體力，跨節點保留；戰死即結束一夜
 var _combat: Node = null
 var _ui_root: MarginContainer
@@ -107,12 +117,7 @@ func _present_node(t: int) -> void:
 			_log("\n[color=#ff3d81]▶ %s[/color]：一隻「%s」擋住去路（品質 %d）。" % [info.name, _pending.id, q])
 			_set_actions([["應戰", _start_combat.bind(t), ROSE]])
 		RunManager.NodeType.BLACK_MARKET:
-			_log("\n[color=#38e1e8]▶ 黑市[/color]：暗處有人兜售道具，也能在此稍作休整。")
-			var acts: Array = []
-			if _night_hp < 100:
-				acts.append(["休整（回復 25 魂）", _on_rest, CYAN])
-			acts.append(["離開黑市", _advance, MUTED])
-			_set_actions(acts)
+			_enter_black_market()
 		RunManager.NodeType.SIGHTING:
 			_log("\n[color=#ffb45a]▶ 目擊[/color]：%s" % StorySystem.next_sighting())
 			_set_actions([["繼續前行", _advance, AMBER]])
@@ -126,11 +131,53 @@ func _present_node(t: int) -> void:
 			_set_actions([["決戰", _start_combat.bind(t), ROSE]])
 
 
+func _enter_black_market() -> void:
+	_log("\n[color=#38e1e8]▶ 黑市[/color]：暗處的攤販掀開布幔，貨色以殘留魂魄計價。")
+	var pool := MARKET_ITEMS.duplicate()
+	pool.shuffle()
+	_market_offer = pool.slice(0, 3)      # 每次隨機三樣
+	_market_bought = []
+	_refresh_market()
+
+
+func _refresh_market() -> void:
+	var acts: Array = []
+	for it in _market_offer:
+		if _market_bought.has(it.id):
+			continue
+		var can: bool = SoulSystem.residual_souls >= it.cost
+		acts.append(["%s ·花%d｜%s" % [it.name, it.cost, it.desc], _buy_item.bind(it), CYAN if can else FAINT])
+	if _night_hp < 100:
+		acts.append(["休整（免費 · 回復 25 魂）", _on_rest, AMBER])
+	acts.append(["離開黑市", _advance, MUTED])
+	_set_actions(acts)
+
+
+func _buy_item(it: Dictionary) -> void:
+	if not SoulSystem.spend_residual_souls(it.cost):
+		_log("[color=#ff6b6b]殘留魂魄不足，買不起「%s」。[/color]" % it.name)
+		_refresh_market()
+		return
+	match it.id:
+		"heal":
+			_night_hp = mini(100, _night_hp + 40)
+		"dmg":
+			RunManager.run_dmg_mult += 0.2
+		"spd":
+			RunManager.run_speed_mult += 0.15
+		"cap":
+			SoulSystem.bonus_capacity += 1
+	_market_bought.append(it.id)
+	_log("你買下了「[color=#38e1e8]%s[/color]」——%s。" % [it.name, it.desc])
+	_refresh_status()
+	_refresh_market()
+
+
 func _on_rest() -> void:
 	_night_hp = mini(100, _night_hp + 25)
 	_log("你在暗巷角落喘了口氣。（魂 %d/100）" % _night_hp)
 	_refresh_status()
-	_set_actions([["離開黑市", _advance, MUTED]])
+	_refresh_market()
 
 
 # ============================================================
@@ -162,6 +209,8 @@ func _start_combat(t: int) -> void:
 	_combat.cfg_enemy_hp = hp
 	_combat.cfg_types = types
 	_combat.cfg_start_hp = _night_hp
+	_combat.cfg_dmg_mult = RunManager.run_dmg_mult      # 黑市加成帶入戰鬥
+	_combat.cfg_move_mult = RunManager.run_speed_mult
 	_combat.cfg_vessel = maxi(0, RunManager.VESSELS.find(RunManager.current_vessel))
 	_combat.finished.connect(_on_combat_finished)
 	_ui_root.visible = false          # 收起地圖 UI，讓戰鬥畫面獨佔
@@ -393,8 +442,16 @@ func _set_actions(actions: Array) -> void:
 
 
 func _refresh_status() -> void:
-	_status.text = "[color=#9c95bb]魂[/color] [color=#ff3d81]%d/100[/color]    [color=#9c95bb]殘留魂魄[/color] [color=#38e1e8]%d[/color]    [color=#9c95bb]魂魄囊[/color] [color=#ff3d81]%d/%d[/color]    [color=#9c95bb]依代[/color] [color=#a97bff]%s[/color]" % [
-		_night_hp, SoulSystem.residual_souls, SoulSystem.satchel.size(), SoulSystem.MAX_SATCHEL_CAPACITY, RunManager.current_vessel
+	var buffs: Array = []
+	if RunManager.run_dmg_mult > 1.0:
+		buffs.append("傷害+%d%%" % int(round((RunManager.run_dmg_mult - 1.0) * 100)))
+	if RunManager.run_speed_mult > 1.0:
+		buffs.append("移動+%d%%" % int(round((RunManager.run_speed_mult - 1.0) * 100)))
+	var buff_txt := ""
+	if not buffs.is_empty():
+		buff_txt = "    [color=#9c95bb]本夜增益[/color] [color=#ffb45a]%s[/color]" % "、".join(buffs)
+	_status.text = "[color=#9c95bb]魂[/color] [color=#ff3d81]%d/100[/color]    [color=#9c95bb]殘留魂魄[/color] [color=#38e1e8]%d[/color]    [color=#9c95bb]魂魄囊[/color] [color=#ff3d81]%d/%d[/color]    [color=#9c95bb]依代[/color] [color=#a97bff]%s[/color]%s" % [
+		_night_hp, SoulSystem.residual_souls, SoulSystem.satchel.size(), SoulSystem.capacity(), RunManager.current_vessel, buff_txt
 	]
 	var id := RunManager.run_identity()
 	var schools := "—" if id.schools.is_empty() else ", ".join(id.schools)
