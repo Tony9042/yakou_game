@@ -82,6 +82,7 @@ const MENTOR_TIERS := [1, 2, 3]
 
 var act := 0                      # 目前幕次（0..4）
 var seen_sightings: Array = []    # 已看過的目擊碎片索引
+var seen_acts: Array = []         # 已播過進場演出的幕次（死亡重跑不再重播）
 var contained_total := 0          # 收容累計（結局傾向，§5.6）
 var suppressed_total := 0         # 鎮壓累計
 var finished := false             # 是否已走完終幕
@@ -181,9 +182,58 @@ func mentor_line(school_id: String) -> String:
 	return MENTOR_LINES[school_id][tier - 1]
 
 
+## 導師的顯示資訊（給對話演出用）。
+const MENTOR_META := {
+	"blade":   {"name": "蓮", "color": "ff3d81", "side": "left"},
+	"ward":    {"name": "灯", "color": "ffb45a", "side": "right"},
+	"rider":   {"name": "迅", "color": "38e1e8", "side": "left"},
+	"support": {"name": "雫", "color": "a97bff", "side": "right"},
+}
+
+
+## 該流派目前已解鎖的全部導師台詞，轉成對話演出格式。
+func mentor_dialogue(school_id: String) -> Array:
+	var tier := mentor_tier(school_id)
+	var meta: Dictionary = MENTOR_META[school_id]
+	var out: Array = []
+	for i in tier:
+		var raw: String = MENTOR_LINES[school_id][i]
+		var body := raw
+		var sep := raw.find("：")
+		if sep >= 0:
+			body = raw.substr(sep + 1)
+		out.append({
+			"name": meta.name,
+			"kanji": meta.name,
+			"color": Color(meta.color),
+			"side": meta.side,
+			"text": body,
+		})
+	return out
+
+
+## 本幕的進場演出是否還沒播過；回傳 true 並標記為已播（死亡重跑就不再重複）。
+func consume_act_intro() -> bool:
+	if seen_acts.has(act):
+		return false
+	seen_acts.append(act)
+	return true
+
+
+## 旁白行（幕次進場／收場／揭示）。
+func narration(text: String) -> Array:
+	var out: Array = []
+	for para in text.split("\n"):
+		var s := String(para).strip_edges()
+		if s != "":
+			out.append({"name": "", "text": s})
+	return out
+
+
 func reset() -> void:
 	act = 0
 	seen_sightings = []
+	seen_acts = []
 	contained_total = 0
 	suppressed_total = 0
 	finished = false

@@ -55,6 +55,38 @@ func _start_night() -> void:
 	_refresh_nodes()
 	_refresh_status()
 	_set_actions([["出發夜行", _advance, ROSE]])
+	if StorySystem.consume_act_intro():               # 同一幕只演一次（死亡重跑不重播）
+		_play_dialogue(StorySystem.narration(a.intro))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_open_menu()
+		get_viewport().set_input_as_handled()
+
+
+func _open_menu() -> void:
+	if get_tree().paused:
+		return
+	var m: Control = load("res://system_menu.tscn").instantiate()
+	# 夜行中多一個放棄選項；戰鬥中不提供，避免中途脫離戰鬥的怪狀態
+	if RunManager.run_active and _combat == null:
+		m.extra = [{"text": "放棄今夜（視為戰死）", "color": ROSE, "cb": _abandon_night}]
+	add_child(m)
+
+
+func _abandon_night() -> void:
+	_log("\n[color=#ff6b6b]你選擇提前退出這一夜。[/color]")
+	RunManager.end_run(false)
+
+
+## 以對話演出播放一段內容；播完自動移除。
+func _play_dialogue(lines: Array) -> void:
+	if lines.is_empty():
+		return
+	var d: Control = load("res://dialogue.tscn").instantiate()
+	add_child(d)
+	d.play(lines)
 
 
 func _advance() -> void:
@@ -191,16 +223,24 @@ func _on_night_ended(success: bool, gained: int) -> void:
 
 	if success:
 		var was_final := StorySystem.is_final_act()
-		_log("\n[color=#c9c1e6]%s[/color]" % StorySystem.current_act().outro)
+		var outro: String = StorySystem.current_act().outro
+		_log("\n[color=#c9c1e6]%s[/color]" % outro)
 		var reveal := StorySystem.advance_act()      # 推進幕次，回傳本次揭示
+
+		# 收場與揭示以對話演出呈現，日誌同步保留一份可回顧
+		var scene_lines: Array = StorySystem.narration(outro)
 		if reveal != "":
 			_log("\n[color=#ffb45a]%s[/color]" % reveal)
+			scene_lines.append_array(StorySystem.narration(reveal))
 		if was_final:
 			var e := StorySystem.ending()
 			_log("\n[color=#38e1e8]— 結局：%s —[/color]" % e.name)
 			_log("[color=#c9c1e6]%s[/color]" % e.text)
+			scene_lines.append({"name": "", "text": "— 結局：%s —" % e.name})
+			scene_lines.append_array(StorySystem.narration(e.text))
 		else:
 			_log("\n[color=#6a6590]下一夜：%s[/color]" % StorySystem.act_title())
+		_play_dialogue(scene_lines)
 	else:
 		_log("[color=#6a6590]這一夜沒能走完，街區的拆除仍在繼續。[/color]")
 
@@ -234,11 +274,24 @@ func _build_ui() -> void:
 	margin.add_child(col)
 
 	# 標題
+	var head := HBoxContainer.new()
+	col.add_child(head)
+
 	var title := Label.new()
 	title.text = "夜行 · 今夜路線"
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", INK)
-	col.add_child(title)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+
+	var menu_btn := Button.new()
+	menu_btn.text = "≡ 選單（ESC）"
+	menu_btn.add_theme_font_size_override("font_size", 13)
+	menu_btn.add_theme_color_override("font_color", MUTED)
+	menu_btn.add_theme_stylebox_override("normal", _box(Color("17141f"), Color("3a3352"), 1, 8))
+	menu_btn.add_theme_stylebox_override("hover", _box(Color("221c30"), MUTED, 1, 8))
+	menu_btn.pressed.connect(_open_menu)
+	head.add_child(menu_btn)
 
 	# 狀態列
 	_status = _make_rich(15)

@@ -25,6 +25,7 @@ func save_game() -> void:
 		"story": {
 			"act": StorySystem.act,
 			"seen_sightings": StorySystem.seen_sightings,
+			"seen_acts": StorySystem.seen_acts,
 			"contained_total": StorySystem.contained_total,
 			"suppressed_total": StorySystem.suppressed_total,
 			"finished": StorySystem.finished,
@@ -77,6 +78,11 @@ func load_game() -> bool:
 			StorySystem.seen_sightings = []
 			for v in seen:
 				StorySystem.seen_sightings.append(int(v))
+		var acts: Variant = story.get("seen_acts", [])
+		if typeof(acts) == TYPE_ARRAY:
+			StorySystem.seen_acts = []
+			for v in acts:
+				StorySystem.seen_acts.append(int(v))
 	return true
 
 

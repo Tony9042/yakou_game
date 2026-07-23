@@ -55,11 +55,24 @@ func _build_ui() -> void:
 	col.add_theme_constant_override("separation", 16)
 	margin.add_child(col)
 
+	var head := HBoxContainer.new()
+	col.add_child(head)
+
 	var title := Label.new()
 	title.text = "橫丁 · 日間"
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", INK)
-	col.add_child(title)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+
+	var menu_btn := Button.new()
+	menu_btn.text = "≡ 選單（ESC）"
+	menu_btn.add_theme_font_size_override("font_size", 13)
+	menu_btn.add_theme_color_override("font_color", MUTED)
+	menu_btn.add_theme_stylebox_override("normal", _box(Color("17141f"), Color("3a3352"), 1, 8))
+	menu_btn.add_theme_stylebox_override("hover", _box(Color("221c30"), MUTED, 1, 8))
+	menu_btn.pressed.connect(_open_menu)
+	head.add_child(menu_btn)
 
 	var sub := Label.new()
 	sub.text = "花殘留魂魄投流派點。同時投兩條流派達門檻，會自動解鎖跨流派複合技。"
@@ -167,6 +180,16 @@ func _make_school_column(sid: String) -> Control:
 		quote.text = "[color=#b9b1d6]%s[/color]" % line
 	v.add_child(quote)
 
+	if StorySystem.mentor_tier(sid) > 0:
+		var talk := Button.new()
+		talk.text = "與 %s 談話" % meta.mentor
+		talk.add_theme_font_size_override("font_size", 12)
+		talk.add_theme_color_override("font_color", accent)
+		talk.add_theme_stylebox_override("normal", _box(Color("1a1730"), accent, 1, 7))
+		talk.add_theme_stylebox_override("hover", _box(Color("241f3c"), accent, 2, 7))
+		talk.pressed.connect(_on_talk.bind(sid))
+		v.add_child(talk)
+
 	# 重置
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 4)
@@ -224,6 +247,27 @@ func _on_respec(sid: String) -> void:
 	_event = ""
 	SaveSystem.save_game()
 	_refresh()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_open_menu()
+		get_viewport().set_input_as_handled()
+
+
+func _open_menu() -> void:
+	if get_tree().paused:
+		return
+	add_child(load("res://system_menu.tscn").instantiate())
+
+
+func _on_talk(sid: String) -> void:
+	var lines: Array = StorySystem.mentor_dialogue(sid)
+	if lines.is_empty():
+		return
+	var d: Control = load("res://dialogue.tscn").instantiate()
+	add_child(d)
+	d.play(lines)
 
 
 func _go_night() -> void:
