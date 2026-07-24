@@ -483,6 +483,7 @@ func _try_attack() -> void:
 	atk_t = ATK_WINDUP + ATK_ACTIVE + ATK_RECOVER
 	atk_hit_done = false
 	lunge = COMBO_LUNGE[combo]
+	AudioManager.play("swing", 1.0 + combo * 0.09 + randf_range(-0.05, 0.05))
 
 
 func _try_dash() -> void:
@@ -494,12 +495,14 @@ func _try_dash() -> void:
 	dash_cd = DASH_CD
 	dash_damage = false
 	invuln = max(invuln, DASH_TIME + 0.05)
+	AudioManager.play("dash")
 
 
 func _try_skill(i: int) -> void:
 	if not _skill_ready(i) or atk_t > 0.0 or dash_t > 0.0:
 		return
 	skill_cd[i] = SKILLS[i].cd
+	AudioManager.play("skill")
 	match i:
 		0: _skill_iai()
 		1: _skill_dash_slash()
@@ -799,6 +802,7 @@ func _radial_hit(radius: float, dmg: int, kb: float, stun := 0.0) -> bool:
 func _damage_enemy(e: Dictionary, dmg: int, kb_vec: Vector2, stun: float, dist: float) -> void:
 	dmg = int(round(dmg * cfg_dmg_mult))        # 套用黑市傷害加成
 	e.hp -= dmg
+	AudioManager.play("hit", randf_range(0.94, 1.08), -3.0)
 	e.flash = 0.12
 	e.kb = kb_vec
 	if stun > 0.0:
@@ -876,6 +880,7 @@ func _hurt_player(dmg: int) -> void:
 	invuln = INVULN_AFTER_HIT
 	shake = 1.0
 	hitstop = 0.04
+	AudioManager.play("hurt")
 
 
 func _update_camera() -> void:
@@ -904,6 +909,7 @@ func _end_fight(won: bool) -> void:
 	_clear(_actions)
 	_banner.text = "付喪神已伏" if won else "依代毀去"
 	_banner.add_theme_color_override("font_color", CYAN if won else ROSE)
+	AudioManager.play("win" if won else "lose")
 
 	if embedded:
 		await get_tree().create_timer(0.9).timeout
@@ -1018,6 +1024,7 @@ func _button(text: String, accent: Color, cb: Callable) -> Button:
 	b.add_theme_stylebox_override("normal", _sb(Color("221d33"), accent, 1, 9))
 	b.add_theme_stylebox_override("hover", _sb(Color("2c2545"), accent, 2, 9))
 	b.add_theme_stylebox_override("pressed", _sb(Color("1a1628"), accent, 2, 9))
+	b.pressed.connect(func(): AudioManager.play("click"))
 	b.pressed.connect(cb)
 	return b
 

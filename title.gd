@@ -11,6 +11,7 @@ const VIOLET := Color("a97bff")
 
 
 func _ready() -> void:
+	AudioManager.play_bgm("title")
 	var bg := ColorRect.new()
 	bg.color = NIGHT
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -67,6 +68,7 @@ func _menu_button(text: String, accent: Color, cb: Callable) -> Button:
 	b.add_theme_stylebox_override("normal", _box(Color("17141f"), accent, 1, 10))
 	b.add_theme_stylebox_override("hover", _box(Color("221c30"), accent, 2, 10))
 	b.add_theme_stylebox_override("pressed", _box(Color("120f1a"), accent, 2, 10))
+	b.pressed.connect(func(): AudioManager.play("click"))
 	b.pressed.connect(cb)
 	return b
 

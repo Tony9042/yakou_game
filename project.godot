@@ -28,6 +28,7 @@ RunManager="*res://systems/run_manager.gd"
 StreamerHooks="*res://systems/streamer_hooks.gd"
 SaveSystem="*res://systems/save_system.gd"
 StorySystem="*res://systems/story_system.gd"
+AudioManager="*res://systems/audio_manager.gd"
 
 [rendering]
 

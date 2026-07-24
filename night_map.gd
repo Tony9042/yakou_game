@@ -44,6 +44,7 @@ var _ui_root: MarginContainer
 
 
 func _ready() -> void:
+	AudioManager.play_bgm("night")
 	_build_ui()
 	if not RunManager.night_ended.is_connected(_on_night_ended):
 		RunManager.night_ended.connect(_on_night_ended)
@@ -168,6 +169,7 @@ func _buy_item(it: Dictionary) -> void:
 		"cap":
 			SoulSystem.bonus_capacity += 1
 	_market_bought.append(it.id)
+	AudioManager.play("buy")
 	_log("你買下了「[color=#38e1e8]%s[/color]」——%s。" % [it.name, it.desc])
 	_refresh_status()
 	_refresh_market()
@@ -437,6 +439,7 @@ func _set_actions(actions: Array) -> void:
 		b.add_theme_stylebox_override("normal", _box(Color("221d33"), accent, 1, 9))
 		b.add_theme_stylebox_override("hover", _box(Color("2c2545"), accent, 2, 9))
 		b.add_theme_stylebox_override("pressed", _box(Color("1a1628"), accent, 2, 9))
+		b.pressed.connect(func(): AudioManager.play("click"))
 		b.pressed.connect(a[1])
 		_action_bar.add_child(b)
 

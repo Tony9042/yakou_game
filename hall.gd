@@ -26,6 +26,7 @@ func _ready() -> void:
 	# 的開發便利：全新且無存檔時給一點起始魂魄，不會蓋掉載入的進度。
 	if SoulSystem.residual_souls == 0 and TalentSystem.invested_schools().is_empty() and not SaveSystem.has_save():
 		SoulSystem.residual_souls = 10
+	AudioManager.play_bgm("hall")
 	if not TalentSystem.composite_unlocked.is_connected(_on_composite):
 		TalentSystem.composite_unlocked.connect(_on_composite)
 	_build_ui()
@@ -71,6 +72,7 @@ func _build_ui() -> void:
 	menu_btn.add_theme_color_override("font_color", MUTED)
 	menu_btn.add_theme_stylebox_override("normal", _box(Color("17141f"), Color("3a3352"), 1, 8))
 	menu_btn.add_theme_stylebox_override("hover", _box(Color("221c30"), MUTED, 1, 8))
+	menu_btn.pressed.connect(func(): AudioManager.play("click"))
 	menu_btn.pressed.connect(_open_menu)
 	head.add_child(menu_btn)
 
@@ -100,6 +102,7 @@ func _build_ui() -> void:
 	go.add_theme_stylebox_override("normal", _box(Color("2a1c28"), ROSE, 1, 10))
 	go.add_theme_stylebox_override("hover", _box(Color("3a2436"), ROSE, 2, 10))
 	go.add_theme_stylebox_override("pressed", _box(Color("241620"), ROSE, 2, 10))
+	go.pressed.connect(func(): AudioManager.play("click"))
 	go.pressed.connect(_go_night)
 	col.add_child(go)
 
@@ -187,6 +190,7 @@ func _make_school_column(sid: String) -> Control:
 		talk.add_theme_color_override("font_color", accent)
 		talk.add_theme_stylebox_override("normal", _box(Color("1a1730"), accent, 1, 7))
 		talk.add_theme_stylebox_override("hover", _box(Color("241f3c"), accent, 2, 7))
+		talk.pressed.connect(func(): AudioManager.play("click"))
 		talk.pressed.connect(_on_talk.bind(sid))
 		v.add_child(talk)
 
@@ -202,6 +206,7 @@ func _make_school_column(sid: String) -> Control:
 	respec.add_theme_stylebox_override("normal", _box(Color("161324"), FAINT, 1, 7))
 	respec.add_theme_stylebox_override("hover", _box(Color("201b30"), MUTED, 1, 7))
 	respec.add_theme_stylebox_override("disabled", _box(Color("131120"), Color("2a2740"), 1, 7))
+	respec.pressed.connect(func(): AudioManager.play("click"))
 	respec.pressed.connect(_on_respec.bind(sid))
 	v.add_child(respec)
 
@@ -238,6 +243,7 @@ func _make_node_button(sid: String, node_name: String, nd: Dictionary, accent: C
 func _on_unlock(sid: String, node_name: String) -> void:
 	_event = ""                              # 先清舊事件；若本次投點觸發複合技，
 	TalentSystem.unlock_node(sid, node_name) # _on_composite 會在此期間重設 _event
+	AudioManager.play("buy")
 	SaveSystem.save_game()
 	_refresh()
 

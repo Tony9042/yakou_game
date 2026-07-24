@@ -56,6 +56,11 @@ func _build() -> void:
 	v.add_child(gap)
 
 	v.add_child(_btn("繼續遊戲", CYAN, _resume))
+
+	var at := _btn(_audio_label(), MUTED, Callable())
+	at.pressed.connect(_toggle_audio.bind(at))
+	v.add_child(at)
+
 	for e in extra:
 		v.add_child(_btn(e.text, e.get("color", VIOLET), _run_extra.bind(e.cb)))
 	v.add_child(_btn("存檔並回標題", VIOLET, _to_title))
@@ -79,8 +84,19 @@ func _btn(text: String, accent: Color, cb: Callable) -> Button:
 	b.add_theme_stylebox_override("normal", _sb(Color("17141f"), accent, 1, 9))
 	b.add_theme_stylebox_override("hover", _sb(Color("221c30"), accent, 2, 9))
 	b.add_theme_stylebox_override("pressed", _sb(Color("120f1a"), accent, 2, 9))
-	b.pressed.connect(cb)
+	b.pressed.connect(func(): AudioManager.play("click"))
+	if cb.is_valid():
+		b.pressed.connect(cb)
 	return b
+
+
+func _audio_label() -> String:
+	return "音效：開" if AudioManager.enabled else "音效：關"
+
+
+func _toggle_audio(b: Button) -> void:
+	AudioManager.set_enabled(not AudioManager.enabled)
+	b.text = _audio_label()
 
 
 func _unhandled_input(event: InputEvent) -> void:
